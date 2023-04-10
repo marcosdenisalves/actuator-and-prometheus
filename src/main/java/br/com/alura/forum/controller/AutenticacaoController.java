@@ -2,6 +2,7 @@ package br.com.alura.forum.controller;
 
 import javax.validation.Valid;
 
+import io.micrometer.core.instrument.MeterRegistry;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.annotation.Profile;
 import org.springframework.http.ResponseEntity;
@@ -17,12 +18,26 @@ import org.springframework.web.bind.annotation.RestController;
 import br.com.alura.forum.config.security.TokenService;
 import br.com.alura.forum.controller.dto.TokenDto;
 import br.com.alura.forum.controller.form.LoginForm;
+import io.micrometer.core.instrument.Counter;
 
 @RestController
 @RequestMapping("/auth")
 @Profile(value = {"prod", "test"})
 public class AutenticacaoController {
-	
+
+	Counter authUserSuccess;
+	Counter authUserErrors;
+
+	public AutenticacaoController(MeterRegistry registry) {
+		authUserSuccess = Counter.builder("auth_user_success")
+				.description("usuarios autenticados")
+				.register(registry);
+
+		authUserErrors = Counter.builder("auth_user_error")
+				.description("erros de login")
+				.register(registry);
+	}
+
 	@Autowired
 	private AuthenticationManager authManager;
 	
@@ -35,10 +50,13 @@ public class AutenticacaoController {
 		
 		try {
 			Authentication authentication = authManager.authenticate(dadosLogin);
-			String token = tokenService.gerarToken(authentication); 		
+			String token = tokenService.gerarToken(authentication);
+			authUserSuccess.increment();
+
 			return ResponseEntity.ok(new TokenDto(token, "Bearer"));
 			
 		} catch (AuthenticationException e) {
+			authUserErrors.increment();
 			return ResponseEntity.badRequest().build();
 		}
 
